@@ -5,10 +5,9 @@ import dynamic from 'next/dynamic';
 // This is the magic trick to stop Next.js from crashing!
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 
-// NEW: We now accept repulsion and linkDistance from the dashboard
 const KnowledgeGraph = ({ data, repulsion = 30, linkDistance = 40 }) => {
   const containerRef = useRef(null);
-  const fgRef = useRef(); // NEW: Reference to the internal D3 physics engine
+  const fgRef = useRef(); 
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   // Ensure the graph resizes to fit its container perfectly
@@ -50,19 +49,23 @@ const KnowledgeGraph = ({ data, repulsion = 30, linkDistance = 40 }) => {
     return colorPalette[index];
   };
 
+  // --- THE SAFETY FILTER ---
+  // 1. Create a fast-lookup Set of all the valid Node IDs the AI actually gave us
+  const validNodeIds = new Set(data?.nodes?.map(n => n.id) || []);
+
   const graphData = {
     nodes: data?.nodes?.map(node => ({ ...node, color: getNodeColor(node.label) })) || [],
-    links: data?.edges?.map(edge => ({ ...edge, name: edge.type })) || [] 
+    
+    // 2. Filter out any "orphan" edges where the source or target node doesn't exist!
+    links: data?.edges?
+      .filter(edge => validNodeIds.has(edge.source) && validNodeIds.has(edge.target))
+      .map(edge => ({ ...edge, name: edge.type })) || [] 
   };
 
-  // NEW: Update D3 Physics when sliders change!
   useEffect(() => {
     if (fgRef.current) {
-      // Repulsion is a negative charge in D3 physics
       fgRef.current.d3Force('charge').strength(-repulsion);
-      // Set the link distance
       fgRef.current.d3Force('link').distance(linkDistance);
-      // "Reheat" the simulation so it starts moving immediately when the slider is dragged
       fgRef.current.d3ReheatSimulation();
     }
   }, [repulsion, linkDistance, graphData]);
@@ -71,7 +74,7 @@ const KnowledgeGraph = ({ data, repulsion = 30, linkDistance = 40 }) => {
     <div ref={containerRef} className="w-full h-full min-h-[500px] bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700">
       {graphData.nodes.length > 0 ? (
         <ForceGraph2D
-          ref={fgRef} // NEW: Attach the reference to the graph
+          ref={fgRef} 
           width={dimensions.width}
           height={dimensions.height}
           graphData={graphData}
